@@ -1,7 +1,5 @@
-try:
-    from rule_builder import True_, OptionFilter
-except ModuleNotFoundError:
-    from ..rule_builder import True_, OptionFilter
+from ..features import KeyDoor
+from rule_builder.rules import True_, OptionFilter
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has
 from ..items import DeathsDoorItemName as I
@@ -28,10 +26,10 @@ ceramic_manor_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.CERAMIC_MANOR_MAIN_LOBBY,
         R.CERAMIC_MANOR_LEFT,
-        Has(I.YELLOW_KEY, 3) | Has(I.LEVER_MANOR_BIG_POT_ARENA),
+        KeyDoor(I.YELLOW_KEY, 3, "mlock_1") | Has(I.LEVER_MANOR_BIG_POT_ARENA),
     ),
     DeathsDoorEntrance(
-        R.CERAMIC_MANOR_MAIN_LOBBY, R.CERAMIC_MANOR_LIBRARY, Has(I.YELLOW_KEY, 3)
+        R.CERAMIC_MANOR_MAIN_LOBBY, R.CERAMIC_MANOR_LIBRARY, KeyDoor(I.YELLOW_KEY, 3, "mlock_0")
     ),
     # TODO: Base randomizer has a confusing "entrance" here from the Ancient Door back to Ceramic Manor... Omitting for now
     DeathsDoorEntrance(
@@ -42,7 +40,7 @@ ceramic_manor_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.CERAMIC_MANOR_MAIN_LOBBY,
         R.CERAMIC_MANOR_EXIT_TO_FURNACE_OBSERVATION_ROOMS,
-        Has(I.YELLOW_KEY, 3) & Has(I.FIRE),
+        KeyDoor(I.YELLOW_KEY, 3, "mlock_elevator") & Has(I.FIRE),
     ),
     ## TODO: Check if can return from furnace observation rooms without it being opened, not in base rando. Follow-up: Not without being able to use keys from the other side
 ]

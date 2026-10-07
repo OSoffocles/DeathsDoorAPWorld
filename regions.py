@@ -272,6 +272,8 @@ class DeathsDoorRegionName(str, Enum):
 no_jefferson_regions: list[DeathsDoorRegionName] = [
     # Hall of Doors Regions and Door Check Regions
     DeathsDoorRegionName.HALL_OF_DOORS_LOBBY,
+    # Only reachable through its Hall of Doors door, which Jefferson can't use, so its Jefferson copy was an orphan
+    DeathsDoorRegionName.GROVE_OF_SPIRITS_DOOR,
     DeathsDoorRegionName.DOOR_TO_GROVE_OF_SPIRITS,
     DeathsDoorRegionName.DOOR_TO_LOST_CEMETERY,
     DeathsDoorRegionName.DOOR_TO_ESTATE_OF_THE_URN_WITCH,

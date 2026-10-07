@@ -404,7 +404,7 @@ two_way_scene_transitions: list[
         DeathsDoorEntrance(
             R.FURNACE_OBSERVATION_ROOMS_EXIT_TO_INNER_FURNACE,
             R.INNER_FURNACE_EXIT_TO_FURNACE_OBSERVATION_ROOMS,
-            None,
+            Has(I.FIRE),
             "Furnace Observation Rooms to Inner Furnace",
             "d_basementtoromp",
             "lvl_GrandmaBasement",

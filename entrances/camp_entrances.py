@@ -1,3 +1,4 @@
+from ..features import KeyDoor
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has
 from ..items import DeathsDoorItemName as I
@@ -61,6 +62,6 @@ camp_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.CAMP_OF_THE_FREE_CROWS_VILLAGE,
         R.CAMP_OF_THE_FREE_CROWS_ELEVATOR,
-        Has(I.PINK_KEY, 5),
+        KeyDoor(I.PINK_KEY, 5, "keydoor_covenant"),
     ),
 ]

@@ -41,7 +41,10 @@ def create_jefferson_regions(world: "DeathsDoorWorld"):
 def create_jefferson_internal_connections(world: "DeathsDoorWorld"):
     # Connect the Jefferson regions internally
     for entrance in deathsdoor_internal_entrances:
-        if not entrance.no_jefferson:
+        if not entrance.no_jefferson and not (
+            entrance.starting_region in no_jefferson_regions
+            or entrance.ending_region in no_jefferson_regions
+        ):
             start_region = world.multiworld.get_region(
                 entrance.starting_region.value + jefferson_tag, world.player
             )

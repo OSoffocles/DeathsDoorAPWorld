@@ -7,4 +7,7 @@ grove_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.GROVE_OF_SPIRITS, R.GROVE_OF_SPIRITS_EXIT_TO_LOST_CEMETERY, None
     ),
+    DeathsDoorEntrance(
+        R.GROVE_OF_SPIRITS_EXIT_TO_LOST_CEMETERY, R.GROVE_OF_SPIRITS, None
+    ),
 ]

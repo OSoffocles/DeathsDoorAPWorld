@@ -1,4 +1,5 @@
 import dataclasses
+from .features import KeyDoor
 from typing import TYPE_CHECKING
 
 from .items import DeathsDoorItemName as I
@@ -8,24 +9,16 @@ from .regions import DeathsDoorRegionName as R
 from .options import OffscreenTargetingTricks, GeometryExploits, RollBuffers
 from .vanilla_pools import vanilla_location_lookup
 
-try:
-    from rule_builder import (
-        Rule,
-        True_,
-        OptionFilter,
-    )
-except ModuleNotFoundError:
-    from .rule_builder import (
-        Rule,
-        True_,
-        OptionFilter,
-    )
-from .rule_builder_overrides import (
+from rule_builder.rules import (
+    Rule,
+    True_,
+    OptionFilter,
     Has,
     HasAny,
     HasAll,
-    CanReachRegion,
+    CanReachRegion
 )
+
 
 if TYPE_CHECKING:
     from . import DeathsDoorWorld
@@ -61,10 +54,10 @@ class HasPlantedEnoughLifeSeeds(Rule["DeathsDoorWorld"], game="Death's Door"):
         def _evaluate(self, state: "CollectionState") -> bool:
             return state.has(
                 E.PLANTED_SEED.value, self.player, count=self.planted_seeds_required
-            )
+            ) and state.has(I.LIFE_SEED.value, self.player, count=self.planted_seeds_required)
 
         def item_dependencies(self) -> dict[str, set[int]]:
-            return {E.PLANTED_SEED.value: {id(self)}}
+            return {E.PLANTED_SEED.value: {id(self)}, I.LIFE_SEED.value: {id(self)}}
 
 
 deaths_door_location_rules: dict[L, Rule["DeathsDoorWorld"] | None] = {
@@ -85,7 +78,7 @@ deaths_door_location_rules: dict[L, Rule["DeathsDoorWorld"] | None] = {
     L.OLD_PHOTOGRAPH: Has(I.FIRE),
     L.TOKEN_OF_DEATH: Has(I.HOOKSHOT),
     L.MALFORMED_SEED: Has(I.HOOKSHOT),
-    L.CORRUPTED_ANTLER: Has(I.BOMB) & Has(I.GREEN_KEY, 4),
+    L.CORRUPTED_ANTLER: Has(I.BOMB) & KeyDoor(I.GREEN_KEY, 4, "fstlock_4"),
     L.GRUNTS_OLD_MASK: Has(E.RESCUE_GRUNT)
     & CanReachRegion(R.THRONE_OF_THE_FROG_KING),  ##TODO: FIX THIS
     L.ANCIENT_DOOR_SCALE_MODEL: Has(I.FIRE),
@@ -163,7 +156,7 @@ deaths_door_location_rules: dict[L, Rule["DeathsDoorWorld"] | None] = {
     ),
     L.LEVER_LOCKSTONE_SHRINE: Has(I.HOOKSHOT),
     L.LEVER_LOCKSTONE_UPPER_PUZZLE: Has(I.HOOKSHOT),
-    L.LEVER_LOCKSTONE_UPPER_DUAL_LASER_PUZZLE: Has(I.PINK_KEY, 5) & Has(I.HOOKSHOT),
+    L.LEVER_LOCKSTONE_UPPER_DUAL_LASER_PUZZLE: KeyDoor(I.PINK_KEY, 5, "ffort_key1") & Has(I.HOOKSHOT),
     L.LEVER_FORTRESS_MAIN_GATE: HasAny(I.BOMB, I.HOOKSHOT),
     L.LEVER_FORTRESS_CENTRAL_SHORTCUT: Has(I.BOMB),
     L.KEY_LOCKSTONE_WEST: Has(I.HOOKSHOT),
@@ -172,7 +165,7 @@ deaths_door_location_rules: dict[L, Rule["DeathsDoorWorld"] | None] = {
     L.KEY_DUNGEON_NEAR_WATER_ARENA: Has(I.FIRE),
     L.KEY_DUNGEON_RIGHT: Has(I.FIRE),
     L.CROW_DUNGEON_COBWEB: Has(I.FIRE),
-    L.CROW_LOCKSTONE_WEST_LOCKED: Has(I.PINK_KEY, 5)
+    L.CROW_LOCKSTONE_WEST_LOCKED: KeyDoor(I.PINK_KEY, 5, "ffort_key2")
     | HasAny(I.SWORD, I.ROGUE_DAGGERS, I.REAPERS_GREATSWORD, I.DISCARDED_UMBRELLA)
     & (True_(options=[OptionFilter(RollBuffers, 1)]) | Has(E.OOL)),
     L.RED_ANCIENT_TABLET_OF_KNOWLEDGE: HasAll(E.ACCESS_TO_NIGHT, I.HOOKSHOT),

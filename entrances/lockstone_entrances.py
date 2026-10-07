@@ -1,9 +1,7 @@
+from ..features import KeyDoor
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has, HasAny, HasAll
-try:
-    from rule_builder import True_, OptionFilter
-except ModuleNotFoundError:
-    from ..rule_builder import True_, OptionFilter
+from rule_builder.rules import True_, OptionFilter
 from ..items import DeathsDoorItemName as I
 from ..regions import DeathsDoorRegionName as R
 from ..events import DeathsDoorEventName as E
@@ -105,7 +103,7 @@ lockstone_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.CASTLE_LOCKSTONE_EAST_UPPER_KEYED_DOOR,
         R.CASTLE_LOCKSTONE_LORD_THEODOOR,
-        Has(I.PINK_KEY, 5)
+        KeyDoor(I.PINK_KEY, 5, "ffort_key1")
         & HasAll(I.HOOKSHOT, I.LEVER_LOCKSTONE_UPPER_DUAL_LASER_PUZZLE),
     ),
     DeathsDoorEntrance(

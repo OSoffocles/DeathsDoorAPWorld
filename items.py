@@ -1301,4 +1301,6 @@ def items_for_group(group: ItemGroup) -> set[str]:
 
 item_name_groups: dict[str, set[str]] = {}
 for group in ItemGroup:
-    item_name_groups[group.value] = items_for_group(group)
+    # An item group may not share its name with an item ("Life Seed"), so pluralise those.
+    group_name = group.value + "s" if group == ItemGroup.LIFE_SEED else group.value
+    item_name_groups[group_name] = items_for_group(group)

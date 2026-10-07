@@ -91,8 +91,8 @@ class ExtraMagicShards(Range):
 class ExtraVitalityShards(Range):
     """Add extra vitality shards to the item pool, replacing Soul Orb items. Extra vitality shards can allow your health to go over the vanilla maximum of 6. Each extra pip of health requires 4 shards."""
 
-    internal_name = "extra_magic_shards"
-    display_name = "Extra Magic Shards"
+    internal_name = "extra_vitality_shards"
+    display_name = "Extra Vitality Shards"
     range_start = 0
     range_end = 8
     default = 0
@@ -240,6 +240,8 @@ class UnrandomizedPools(OptionSet):
 
     If you remove Weapons from randomization, your starting weapon will be forced to be the Reaper's Sword (default weapon).
     If you remove Shiny Things from randomization, Rusty Belltower Key will still be added to the pool for day/night access.
+    If you remove Doors from randomization, you start with the Castle Lockstone and Camp of the Free Crows doors, since generation rarely succeeds otherwise.
+    If you remove Soul Orbs together with so many other pools that fewer than 70 locations stay randomized, Soul Orbs will be randomized anyway, since generation is not reliable without them.
     If you combine this option with plando not from pool, you are very likely to encounter generation errors.
     The fewer pools randomized, the more likely you are to encounter generation errors."""
 
@@ -271,6 +273,84 @@ class EntranceRandomization(Choice):
     option_off = 0
     option_coupled = 1
     option_decoupled = 2
+
+
+class ShopUpgrades(Toggle):
+    """Turn the 20 stat upgrades sold by the Banker (5 each of Strength, Dexterity, Haste and Magic) into checks.
+    Buying an upgrade sends a check instead of raising your stat; your stats rise when you receive the matching
+    "Progressive Strength/Dexterity/Haste/Magic" items.
+    Logic expects the 1st, 2nd, 3rd, 4th and 5th upgrade of a stat once you can reach 1, 2, 4, 6 and 8 areas with
+    enemies to earn souls in (the Hall of Doors has none). Each stat's prices always rise from one upgrade to the next. The Banker in the Hall of Doors and in the Camp of the Free Crows share the same stock."""
+
+    internal_name = "shop_upgrades"
+    display_name = "Shop Upgrades"
+
+
+class ShopPrices(Choice):
+    """How much each shop upgrade costs when Shop Upgrades is on.
+    - Vanilla: 400, 600, 800, 1000, 1500 souls for the 1st to 5th purchase of each stat.
+    - Shuffled: the 20 vanilla prices are shuffled between the stats (each stat still gets cheaper upgrades first).
+    - Random Range: every upgrade costs a random amount between Shop Price Minimum and Shop Price Maximum, sorted so each stat gets more expensive."""
+
+    internal_name = "shop_prices"
+    display_name = "Shop Prices"
+    option_vanilla = 0
+    option_shuffled = 1
+    option_random_range = 2
+    default = 0
+
+
+class ShopPriceMinimum(Range):
+    """Lowest price of a shop upgrade when Shop Prices is Random Range."""
+
+    internal_name = "shop_price_minimum"
+    display_name = "Shop Price Minimum"
+    range_start = 0
+    range_end = 5000
+    default = 200
+
+
+class ShopPriceMaximum(Range):
+    """Highest price of a shop upgrade when Shop Prices is Random Range. If lower than the minimum, the two are swapped."""
+
+    internal_name = "shop_price_maximum"
+    display_name = "Shop Price Maximum"
+    range_start = 0
+    range_end = 5000
+    default = 1500
+
+
+
+class ExtraStatUpgrades(Range):
+    """Add this many extra Progressive Strength/Dexterity/Haste/Magic items (random stats) on top of the normal ones,
+    replacing Soul Orb filler. Stats can go past the vanilla maximum of 5 this way. Works with or without Shop Upgrades."""
+
+    internal_name = "extra_stat_upgrades"
+    display_name = "Extra Stat Upgrades"
+    range_start = 0
+    range_end = 20
+    default = 0
+
+class PlantingChecks(Range):
+    """Number of checks for planting Life Seeds in pots. Each check is sent once you have planted
+    a multiple of Seeds Per Planting Check (e.g. 10 checks with 5 seeds each: checks at 5, 10, ..., 50 seeds planted).
+    0 turns planting checks off. The number is lowered automatically if there aren't enough Life Seeds in the pool."""
+
+    internal_name = "planting_checks"
+    display_name = "Planting Checks"
+    range_start = 0
+    range_end = 50
+    default = 0
+
+
+class SeedsPerPlantingCheck(Range):
+    """How many Life Seeds you have to plant for each planting check."""
+
+    internal_name = "seeds_per_planting_check"
+    display_name = "Seeds Per Planting Check"
+    range_start = 1
+    range_end = 50
+    default = 1
 
 class DeathsDoorPlandoConnections(PlandoConnections):
     """
@@ -314,6 +394,13 @@ class DeathsDoorOptions(PerGameCommonOptions):
     goal: Goal
     entrance_randomization : EntranceRandomization
     plando_connections: DeathsDoorPlandoConnections
+    shop_upgrades: ShopUpgrades
+    shop_prices: ShopPrices
+    shop_price_minimum: ShopPriceMinimum
+    shop_price_maximum: ShopPriceMaximum
+    extra_stat_upgrades: ExtraStatUpgrades
+    planting_checks: PlantingChecks
+    seeds_per_planting_check: SeedsPerPlantingCheck
 
 
 deathsdoor_options_presets: dict[str, dict[str, Any]] = {}
@@ -323,5 +410,7 @@ deathsdoor_option_groups: list[OptionGroup] = [
                                   BombBellGlitch, OffscreenTargetingTricks, GeometryExploits, RollBuffers]),
     OptionGroup("Itempool Modification Options", [ExtraLifeSeeds, ExtraMagicShards, ExtraVitalityShards,
                                                   RemoveSpellUpgrades, UnrandomizedPools, TrapChance, TrapTypeWeights]),
+    OptionGroup("Shop and Planting", [ShopUpgrades, ShopPrices, ShopPriceMinimum, ShopPriceMaximum, ExtraStatUpgrades,
+                                      PlantingChecks, SeedsPerPlantingCheck]),
     OptionGroup("Customization Options", [StartWeapon, SoulMultiplier, StartingSouls])
 ]

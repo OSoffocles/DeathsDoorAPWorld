@@ -1,9 +1,7 @@
+from ..features import KeyDoor
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has, HasAny
-try:
-    from rule_builder import True_, OptionFilter
-except ModuleNotFoundError:
-    from ..rule_builder import True_, OptionFilter
+from rule_builder.rules import True_, OptionFilter
 from ..items import DeathsDoorItemName as I
 from ..regions import DeathsDoorRegionName as R
 from ..events import DeathsDoorEventName as E
@@ -109,7 +107,7 @@ mushroom_dungeon_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.MUSHROOM_DUNGEON_MAIN_HALL,
         R.MUSHROOM_DUNGEON_WATER_ARENA,
-        Has(I.GREEN_KEY, 4),
+        KeyDoor(I.GREEN_KEY, 4, "fstlock_2"),
     ),
     DeathsDoorEntrance(
         R.MUSHROOM_DUNGEON_BIG_DOOR,
@@ -119,7 +117,7 @@ mushroom_dungeon_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.MUSHROOM_DUNGEON_MAIN_HALL,
         R.MUSHROOM_DUNGEON_RIGHTMOST_CROW,
-        Has(I.GREEN_KEY, 4),
+        KeyDoor(I.GREEN_KEY, 4, "fstlock_1"),
     ),
     DeathsDoorEntrance(
         R.OVERGROWN_RUINS_FOREST_SETTLEMENT,

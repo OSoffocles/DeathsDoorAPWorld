@@ -1,8 +1,9 @@
+from .features import KeyDoor
 from typing import TYPE_CHECKING
 from .rule_builder_overrides import Has, HasAll, CanReachRegion
 from .items import DeathsDoorItemName as I
 from .regions import DeathsDoorRegionName as R
-from .options import StartDayOrNight, BombBellGlitch, OffscreenTargetingTricks, Goal
+from .options import StartDayOrNight, BombBellGlitch, OffscreenTargetingTricks, Goal, UnrandomizedPools
 from .events import (
     DeathsDoorEventLocationName as EL,
     DeathsDoorEventName as E,
@@ -11,18 +12,12 @@ from .events import (
 )
 from .rules import HasEnoughLifeSeeds, HasPlantedEnoughLifeSeeds
 
-try:
-    from rule_builder import (
-        Rule,
-        True_,
-        OptionFilter,
-    )
-except ModuleNotFoundError:
-    from .rule_builder import (
-        Rule,
-        True_,
-        OptionFilter,
-    )
+from rule_builder.rules import (
+    Rule,
+    True_,
+    OptionFilter,
+)
+
 
 if TYPE_CHECKING:
     from . import DeathsDoorWorld
@@ -33,14 +28,14 @@ pot_specific_rules: dict[EL: Rule["DeathsDoorWorld"]] = {
     EL.POT_BOMB_SILENT_SERVANT: Has(I.BOMB),
     EL.POT_MANOR_IMP_LOFT: Has(I.FIRE),  ##TODO: Check?
     EL.POT_HOOKSHOT_SILENT_SERVANT: Has(I.LEVER_HOOKSHOT_SILENT_SERVANT),
-    EL.POT_LOCKSTONE_WEST_KEYED_CROW: Has(I.PINK_KEY, 5),
+    EL.POT_LOCKSTONE_WEST_KEYED_CROW: KeyDoor(I.PINK_KEY, 5, "ffort_key2"),
     EL.POT_FORTRESS_MAIN_GATE: Has(I.BOMB),
 }
 
 
 deaths_door_event_rules: dict[EL: Rule["DeathsDoorWorld"] | None] = {
     EL.LORD_OF_DOORS: HasAll(E.GREY_CROW_BOSS, I.HOOKSHOT),
-    EL.TRUE_ENDING: HasAll(I.RED_ANCIENT_TABLET_OF_KNOWLEDGE, I.BLUE_ANCIENT_TABLET_OF_KNOWLEDGE, I.CYAN_ANCIENT_TABLET_OF_KNOWLEDGE, I.PINK_ANCIENT_TABLET_OF_KNOWLEDGE, I.GREEN_ANCIENT_TABLET_OF_KNOWLEDGE, I.PURPLE_ANCIENT_TABLET_OF_KNOWLEDGE, I.YELLOW_ANCIENT_TABLET_OF_KNOWLEDGE) | True_(options=[OptionFilter(Goal, Goal.option_lord_of_doors)]) | True_(options=[OptionFilter(Goal, Goal.option_green_tablet)]),
+    EL.TRUE_ENDING: (HasAll(I.RED_ANCIENT_TABLET_OF_KNOWLEDGE, I.BLUE_ANCIENT_TABLET_OF_KNOWLEDGE, I.CYAN_ANCIENT_TABLET_OF_KNOWLEDGE, I.PURPLE_ANCIENT_TABLET_OF_KNOWLEDGE, I.YELLOW_ANCIENT_TABLET_OF_KNOWLEDGE) & (Has(I.PINK_ANCIENT_TABLET_OF_KNOWLEDGE) | Has(E.PINK_TABLET_PIECE, 3)) & (Has(I.GREEN_ANCIENT_TABLET_OF_KNOWLEDGE) | Has(E.LIFE_SEED_DOOR, options=[OptionFilter(UnrandomizedPools, "Tablet", "contains")]))) | True_(options=[OptionFilter(Goal, Goal.option_lord_of_doors)]) | True_(options=[OptionFilter(Goal, Goal.option_green_tablet)]),
     EL.LIFE_SEED_DOOR: HasPlantedEnoughLifeSeeds(),
     EL.LOST_CEMETERY_OPENED_EXIT_TO_SAILOR: Has(I.FIRE) | True_(options=[OptionFilter(OffscreenTargetingTricks, 1)]) | Has(E.OOL),
     EL.FLOODED_FORTRESS_OPENED_BRIDGE: Has(I.LEVER_FORTRESS_NORTH_WEST),
@@ -84,7 +79,9 @@ deaths_door_event_rules: dict[EL: Rule["DeathsDoorWorld"] | None] = {
 
 # Add in pots to existing tables to be able to use the same infrastructure
 for pot in pot_table:
-    pot_rule = HasEnoughLifeSeeds()
+    # Planting in a pot takes one seed; how many seeds you need in total is checked by HasPlantedEnoughLifeSeeds
+    # and the planting checks
+    pot_rule = Has(I.LIFE_SEED)
     if pot.name in pot_specific_rules.keys():
         pot_rule = pot_rule & pot_specific_rules[pot.name]
     deaths_door_event_rules[pot.name] = pot_rule

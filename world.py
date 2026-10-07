@@ -3,16 +3,17 @@ from logging import warning
 
 from Options import Option, PlandoConnection
 
-try:
-    from rule_builder import RuleWorldMixin, Rule, False_
-except ModuleNotFoundError:
-    from .rule_builder import RuleWorldMixin, Rule, False_
+from rule_builder.rules import Rule, False_
+from rule_builder.cached_world import CachedRuleBuilderWorld
 from .options import (
     DeathsDoorOptions,
     Goal,
+    TrapTypeWeights,
     deathsdoor_options_presets,
     deathsdoor_option_groups,
     StartWeapon,
+    EarlyImportantItem,
+    ShopPrices,
     EntranceRandomization,
 )
 from .vanilla_pools import vanilla_location_lookup
@@ -41,6 +42,22 @@ from .entrances.randomize_transitions import (
     create_vanilla_entrances,
     connect_plando_connection,
 )
+from .features import (
+    STATS,
+    UPGRADES_PER_STAT,
+    VANILLA_UPGRADE_COSTS,
+    MAX_PLANTED,
+    SHOP_ITEM_IDS,
+    SHOP_LOCATION_IDS,
+    PLANTING_LOCATION_IDS,
+    KEY_DOORS_DATASTORAGE_KEY,
+    OPENED_KEY_DOORS,
+    progressive_stat_item,
+    shop_location,
+    planting_location,
+    CanReachSoulAreas,
+    SHOP_TIER_AREAS,
+)
 from .jefferson import (
     create_jefferson_regions,
     create_jefferson_internal_connections,
@@ -57,7 +74,10 @@ from .json_generator import (
     generate_scene_transition_json,
 )
 
-deathsdoor_version = "0.3.0"
+deathsdoor_version = "0.4.0"
+
+# Below this many randomized locations, an unrandomized Soul Orb pool is randomized anyway (see generate_early)
+MIN_LOCATIONS_WITHOUT_SOUL_ORBS = 70
 
 
 class DeathsDoorItem(Item):
@@ -86,7 +106,7 @@ class DeathsDoorWeb(WebWorld):
     ]
 
 
-class DeathsDoorWorld(RuleWorldMixin, World):
+class DeathsDoorWorld(CachedRuleBuilderWorld, World):
     """Reaping souls of the dead and punching a clock might get monotonous but it's honest work for a Crow.
     The job gets lively when your assigned soul is stolen and you must track down a desperate thief to a realm
     untouched by death - where creatures grow far past their expiry."""
@@ -98,16 +118,23 @@ class DeathsDoorWorld(RuleWorldMixin, World):
     topology_present = True  # show path to required location checks in spoiler
     origin_region_name = R.HALL_OF_DOORS_LOBBY
 
-    item_name_to_id = item_name_to_id
-    location_name_to_id = location_name_to_id
-    item_name_groups = item_name_groups
-    location_name_groups = location_name_groups
+    item_name_to_id = {**item_name_to_id, **SHOP_ITEM_IDS}
+    location_name_to_id = {**location_name_to_id, **SHOP_LOCATION_IDS, **PLANTING_LOCATION_IDS}
+    item_name_groups = {**item_name_groups, "Stat Upgrades": set(SHOP_ITEM_IDS)}
+    location_name_groups = {
+        **location_name_groups,
+        "Shop": set(SHOP_LOCATION_IDS),
+        "Planting": set(PLANTING_LOCATION_IDS),
+    }
 
     #  UT Integration
     tracker_world: ClassVar[dict[str, Any]] = tracker_world
     ut_can_gen_without_yaml: ClassVar[bool] = True
     glitches_item_name: ClassVar[str] = E.OOL.value
-    found_entrances_datastorage_key = "{player}_{team}_deathsdoor_found_entrances",
+    found_entrances_datastorage_key = [
+        "{player}_{team}_deathsdoor_found_entrances",
+        KEY_DOORS_DATASTORAGE_KEY,
+    ]
 
     # rule_builder
     rule_caching_enabled = False
@@ -149,10 +176,26 @@ class DeathsDoorWorld(RuleWorldMixin, World):
             I.FIRE,
         ]
         important_item = self.random.choice(early_important_item_candidates)
-        if self.options.early_important_item.option_early:
+        if self.options.early_important_item == EarlyImportantItem.option_early:
             self.multiworld.early_items[self.player][important_item.value] = 1
-        elif self.options.early_important_item.option_local_early:
+        elif self.options.early_important_item == EarlyImportantItem.option_local_early:
             self.multiworld.local_early_items[self.player][important_item.value] = 1
+
+        # Soul Orbs are the only pure filler pool. Without them every item has to fit exactly into the few
+        # randomized locations, which fails generation far too often, so randomize them when the pool is that small.
+        if "Soul Orb" in self.options.unrandomized_pools.value and not getattr(self.multiworld, "re_gen_passthrough", {}):
+            unrandomized = self.options.unrandomized_pools.value
+            randomized_locations = sum(
+                1
+                for location_data in location_table
+                if not unrandomized.intersection(group.value for group in location_data.location_groups)
+            )
+            if randomized_locations < MIN_LOCATIONS_WITHOUT_SOUL_ORBS:
+                warning(
+                    f"{self.player_name}: Only {randomized_locations} locations are randomized with these "
+                    f"unrandomized_pools, which is too few to generate reliably. Soul Orbs will be randomized."
+                )
+                self.options.unrandomized_pools.value = unrandomized - {"Soul Orb"}
 
         # warn for all the incompatible options
         if "Weapon" in self.options.unrandomized_pools.value:
@@ -216,6 +259,50 @@ class DeathsDoorWorld(RuleWorldMixin, World):
                         PlandoConnection(entrance, exit, "entrance")
                     )
 
+        self.setup_shop_and_planting()
+
+    def setup_shop_and_planting(self) -> None:
+        re_gen_passthrough = getattr(self.multiworld, "re_gen_passthrough", {})
+        slot_data: dict[str, Any] = re_gen_passthrough.get(self.game, {}) if re_gen_passthrough else {}
+
+        # Shop prices: stat id -> price of the 1st..5th purchase
+        self.shop_price_table: dict[str, list[int]] = {}
+        if self.options.shop_upgrades:
+            if "shop_price_table" in slot_data:
+                self.shop_price_table = {k: list(v) for k, v in slot_data["shop_price_table"].items()}
+            elif self.options.shop_prices == ShopPrices.option_shuffled:
+                prices = VANILLA_UPGRADE_COSTS * len(STATS)
+                self.random.shuffle(prices)
+                for i, (_, stat_id) in enumerate(STATS):
+                    # each stat keeps rising prices, like the vanilla shop
+                    self.shop_price_table[stat_id] = sorted(prices[i * UPGRADES_PER_STAT:(i + 1) * UPGRADES_PER_STAT])
+            elif self.options.shop_prices == ShopPrices.option_random_range:
+                low, high = sorted((self.options.shop_price_minimum.value, self.options.shop_price_maximum.value))
+                for _, stat_id in STATS:
+                    self.shop_price_table[stat_id] = sorted(
+                        self.random.randint(low, high) for _ in range(UPGRADES_PER_STAT)
+                    )
+            else:
+                for _, stat_id in STATS:
+                    self.shop_price_table[stat_id] = list(VANILLA_UPGRADE_COSTS)
+
+        # Planting checks: never ask for more seeds than exist in the pool or pots in the world
+        per_check = self.options.seeds_per_planting_check.value
+        if "Life Seed" in self.options.unrandomized_pools.value:
+            seeds_available = MAX_PLANTED
+        else:
+            seeds_available = MAX_PLANTED + self.options.extra_life_seeds.value
+        max_checks = min(MAX_PLANTED, seeds_available) // per_check
+        if self.options.planting_checks.value > max_checks:
+            warning(
+                f"{self.player_name}: Only {max_checks} planting checks of {per_check} seeds fit the "
+                f"{min(MAX_PLANTED, seeds_available)} Life Seeds available, lowering planting_checks to {max_checks}."
+            )
+            self.options.planting_checks.value = max_checks
+        self.planting_thresholds: list[int] = [
+            per_check * k for k in range(1, self.options.planting_checks.value + 1)
+        ]
+
     def create_regions(self) -> None:
         for deathsdoor_region in R:
             region = Region(deathsdoor_region.value, self.player, self.multiworld)
@@ -227,6 +314,25 @@ class DeathsDoorWorld(RuleWorldMixin, World):
             current_location_group_names = set(
                 location_group.value for location_group in location_data.location_groups
             )
+
+            # Goal locations are replaced by the goal event regardless of which pools are randomized; otherwise an
+            # unrandomized Shiny Thing / Tablet pool would put the vanilla item there and the goal could never be met.
+            if (
+                self.options.goal == Goal.option_lord_of_doors
+                or self.options.goal == Goal.option_any
+            ) and location_data.name == L.RUSTY_BELLTOWER_KEY:
+                location = DeathsDoorLocation(self.player, location_data.name.value, None, region)
+                region.locations.append(location)
+                location.place_locked_item(self.create_event(E.LORD_OF_DOORS.value))
+                continue
+            if (
+                self.options.goal == Goal.option_green_tablet
+                or self.options.goal == Goal.option_any
+            ) and location_data.name == L.GREEN_ANCIENT_TABLET_OF_KNOWLEDGE:
+                location = DeathsDoorLocation(self.player, location_data.name.value, None, region)
+                region.locations.append(location)
+                location.place_locked_item(self.create_event(E.LIFE_SEED_DOOR.value))
+                continue
 
             # Make all locations that have not been specifically chosen in unrandomized_pools
             # If we somehow end up with items in two location groups, only omit them from randomization if all of their groups have been selected for unrandomized
@@ -313,6 +419,17 @@ class DeathsDoorWorld(RuleWorldMixin, World):
                 self.create_event(event_location_data.event_name.value)
             )
 
+        # Shop and planting checks live in the Hall of Doors, which is always reachable
+        hall = self.get_region(R.HALL_OF_DOORS_LOBBY.value)
+        if self.options.shop_upgrades:
+            for stat, _ in STATS:
+                for level in range(1, UPGRADES_PER_STAT + 1):
+                    name = shop_location(stat, level)
+                    hall.locations.append(DeathsDoorLocation(self.player, name, SHOP_LOCATION_IDS[name], hall))
+        for count in self.planting_thresholds:
+            name = planting_location(count)
+            hall.locations.append(DeathsDoorLocation(self.player, name, PLANTING_LOCATION_IDS[name], hall))
+
         for deathsdoor_entrance in deathsdoor_internal_entrances:
             start_region = self.multiworld.get_region(
                 deathsdoor_entrance.starting_region.value, self.player
@@ -331,8 +448,16 @@ class DeathsDoorWorld(RuleWorldMixin, World):
                 name, ItemClassification.progression, None, self.player
             )
 
+        if name in SHOP_ITEM_IDS:
+            return DeathsDoorItem(name, ItemClassification.useful, SHOP_ITEM_IDS[name], self.player)
+
         # otherwise, look up the item data
         item_data = next(data for data in item_table if data.name.value == name)
+        if name == I.LIFE_SEED.value and getattr(self.multiworld, "generation_is_fake", False):
+            # Universal Tracker: only some Life Seeds are progression (the rest are created useful in create_items).
+            # UT adds the server's classification flags on top of this, so creating them useful here makes the
+            # tracker count exactly the progression seeds, same as generation logic.
+            return DeathsDoorItem(name, ItemClassification.useful, self.item_name_to_id[name], self.player)
         if useful:
             # Used to create useful versions instead of progression based on option
             # Standard create_item will still create the progression version
@@ -356,7 +481,7 @@ class DeathsDoorWorld(RuleWorldMixin, World):
         return DeathsDoorItem(name, ItemClassification.progression, None, self.player)
     
     def create_items(self) -> None:
-        def choose_trap(trap_weights: dict) -> str:
+        def choose_trap(trap_weights: TrapTypeWeights) -> str:
             trap_weights_sum = sum(trap_weights.values())
             return self.random.choices(list(k for k in trap_weights.keys()), list((w/trap_weights_sum) for w in trap_weights.values()))[0]
 
@@ -421,16 +546,20 @@ class DeathsDoorWorld(RuleWorldMixin, World):
                     items_to_create[weapon_name] = 0
                     deathsdoor_items.append(self.create_item(weapon_name, True))
 
+        # Seeds needed for the Green Tablet or the highest planting check are progression
+        progression_seeds = max(
+            self.options.plant_pot_number.value, max(self.planting_thresholds, default=0)
+        )
         if (
-            self.options.plant_pot_number < 50
+            progression_seeds < 50
         ) and "Life Seed" not in self.options.unrandomized_pools.value:
             # Only add life seeds to the pool if they are randomized
             # Only create up to the number of Life Seeds needed for check as progression
-            items_to_create[I.LIFE_SEED.value] = self.options.plant_pot_number.value
+            items_to_create[I.LIFE_SEED.value] = progression_seeds
             # Remainder are useful, include extra_life_seeds addition/subtraction here
             for _ in range(
                 50
-                - self.options.plant_pot_number.value
+                - progression_seeds
                 + self.options.extra_life_seeds.value
             ):
                 deathsdoor_items.append(self.create_item(I.LIFE_SEED.value, True))
@@ -457,9 +586,48 @@ class DeathsDoorWorld(RuleWorldMixin, World):
                 self.push_precollected(removed_item)
                 deathsdoor_items.remove(removed_item)
 
+        if self.options.shop_upgrades:
+            for stat, _ in STATS:
+                for _ in range(UPGRADES_PER_STAT):
+                    deathsdoor_items.append(self.create_item(progressive_stat_item(stat)))
+        for _ in range(self.options.extra_stat_upgrades.value):
+            stat, _ = self.random.choice(STATS)
+            deathsdoor_items.append(self.create_item(progressive_stat_item(stat)))
+
+        if "Door" in self.options.unrandomized_pools.value:
+            # With vanilla doors, Castle Lockstone and the Camp of the Free Crows are only reached through the Camp
+            # elevator's pink key door, and logic has to assume every pink key may be spent elsewhere first. With so
+            # few randomized locations left, fill failed in about 1 in 7 such seeds when fuzzing, so start with those two doors.
+            for door in (I.CASTLE_LOCKSTONE_DOOR.value, I.CAMP_OF_THE_FREE_CROWS_DOOR.value):
+                self.push_precollected(self.create_item(door))
+
         junk = len(self.multiworld.get_unfilled_locations(self.player)) - len(
             deathsdoor_items
         )
+        if junk < 0:
+            # More items than open locations (e.g. the goal removed a location while Soul Orbs, the only pure
+            # filler pool, are unrandomized). Drop filler first, then start the player with the least important items.
+            warning(
+                f"{self.player_name}: {-junk} more item(s) than locations with these options; "
+                "removing filler / adding the least important items to the starting inventory."
+            )
+            priority = {
+                ItemClassification.filler: 0,
+                ItemClassification.trap: 1,
+                ItemClassification.useful: 2,
+            }
+            ordered = sorted(
+                deathsdoor_items,
+                key=lambda item: (
+                    priority.get(item.classification, 3),
+                    self.random.random(),
+                ),
+            )
+            for item in ordered[:-junk]:
+                deathsdoor_items.remove(item)
+                if item.classification not in (ItemClassification.filler, ItemClassification.trap):
+                    self.push_precollected(item)
+            junk = 0
         trap_number = self.random.binomialvariate(junk, trap_chance)
         deathsdoor_items += [
             self.create_item(self.get_filler_item_name()) for _ in range(junk - trap_number)
@@ -473,6 +641,19 @@ class DeathsDoorWorld(RuleWorldMixin, World):
     def set_rules(self) -> None:
         set_location_rules(self)
         set_event_rules(self)
+        if self.options.shop_upgrades:
+            for stat, _ in STATS:
+                for level in range(1, UPGRADES_PER_STAT + 1):
+                    self.set_rule(
+                        self.get_location(shop_location(stat, level)),
+                        CanReachSoulAreas(SHOP_TIER_AREAS[level - 1]),
+                    )
+        for count in self.planting_thresholds:
+            # Planting N seeds needs N seeds and N pots you can reach (each pot event needs one seed)
+            self.set_rule(
+                self.get_location(planting_location(count)),
+                Has(I.LIFE_SEED, count) & Has(E.PLANTED_SEED, count),
+            )
 
         completion_rule: Rule = False_()
         if (
@@ -492,7 +673,7 @@ class DeathsDoorWorld(RuleWorldMixin, World):
             completion_rule = completion_rule | Has(E.LIFE_SEED_DOOR)
 
         self.set_completion_rule(completion_rule)
-        self.register_dependencies()
+        self.register_rule_builder_dependencies()
 
         # generate_rule_json()
         # generate_items_json()
@@ -504,6 +685,10 @@ class DeathsDoorWorld(RuleWorldMixin, World):
         connect_entrances_function(self)
     
     def reconnect_found_entrances(self, found_key: str, data_storage_value) -> None:
+        if found_key.endswith("_deathsdoor_opened_key_doors"):
+            # Key doors the player already opened no longer need every key of that colour (tracker only)
+            OPENED_KEY_DOORS[self.player] = set(data_storage_value or [])
+            return
         coupled = (
             self.options.entrance_randomization == EntranceRandomization.option_coupled
         )
@@ -545,6 +730,11 @@ class DeathsDoorWorld(RuleWorldMixin, World):
             toggles_as_bools=True,
         )
         slot_data["entrance_pairings"] = self.entrance_pairings
+        slot_data["shop_upgrades"] = bool(self.options.shop_upgrades)
+        slot_data["shop_price_table"] = self.shop_price_table
+        slot_data["planting_checks"] = self.options.planting_checks.value
+        slot_data["seeds_per_planting_check"] = self.options.seeds_per_planting_check.value
+        slot_data["planting_thresholds"] = self.planting_thresholds
         slot_data["APWorldVersion"] = deathsdoor_version
         return slot_data
 

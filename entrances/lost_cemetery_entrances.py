@@ -1,9 +1,7 @@
+from ..features import KeyDoor
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has, HasAny, HasAll
-try:
-    from rule_builder import True_, OptionFilter
-except ModuleNotFoundError:
-    from ..rule_builder import True_, OptionFilter
+from rule_builder.rules import True_, OptionFilter
 from ..items import DeathsDoorItemName as I
 from ..regions import DeathsDoorRegionName as R
 from ..events import DeathsDoorEventName as E
@@ -83,7 +81,7 @@ lost_cemetery_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(R.LOST_CEMETERY_BELLTOWER, R.LOST_CEMETERY_STEADHONE, None),
     DeathsDoorEntrance(R.LOST_CEMETERY_EXIT_TO_CRYPT, R.LOST_CEMETERY_BELLTOWER, None),
     DeathsDoorEntrance(
-        R.LOST_CEMETERY_SUMMIT, R.LOST_CEMETERY_BELLTOWER, Has(I.PINK_KEY, 5)
+        R.LOST_CEMETERY_SUMMIT, R.LOST_CEMETERY_BELLTOWER, KeyDoor(I.PINK_KEY, 5, "keydoor_graveyardsummit")
     ),
     DeathsDoorEntrance(
         R.LOST_CEMETERY_STEADHONE,
@@ -97,7 +95,7 @@ lost_cemetery_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.LOST_CEMETERY_CENTRAL,
         R.LOST_CEMETERY_STEADHONE,
-        Has(I.PINK_KEY, 5) | Has(I.LEVER_CATACOMBS_TOWER),
+        KeyDoor(I.PINK_KEY, 5, "keydoor_graveyard1") | Has(I.LEVER_CATACOMBS_TOWER),
     ),
     DeathsDoorEntrance(
         R.LOST_CEMETERY_CENTRAL,

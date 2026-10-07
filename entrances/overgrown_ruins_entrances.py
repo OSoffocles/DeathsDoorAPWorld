@@ -1,3 +1,4 @@
+from ..features import KeyDoor
 from .entrance_class import DeathsDoorEntrance
 from ..rule_builder_overrides import Has
 from ..items import DeathsDoorItemName as I
@@ -43,7 +44,7 @@ overgrown_ruins_entrances: list[DeathsDoorEntrance] = [
     DeathsDoorEntrance(
         R.OVERGROWN_RUINS_OUTSIDE_MAIN_DUNGEON_GATE,
         R.OVERGROWN_RUINS_FOREST_SETTLEMENT,
-        Has(I.GREEN_KEY, 3) | Has(I.LEVER_RUINS_ENTRANCE_LADDER_SHORTCUT),
+        KeyDoor(I.GREEN_KEY, 3, "fstlock_0") | Has(I.LEVER_RUINS_ENTRANCE_LADDER_SHORTCUT),
     ),
     DeathsDoorEntrance(
         R.MUSHROOM_DUNGEON_MAIN_HALL,
